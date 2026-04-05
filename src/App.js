@@ -16,7 +16,7 @@ import {
   moderateContent,
   getViolationMessage,
 } from "./utils/contentModeration";
-import { logUsage, exportLogsAsCSV, initErrorCapture } from "./utils/usageLogger";
+import { logUsage, initErrorCapture } from "./utils/usageLogger";
 import { checkRateLimit } from "./utils/rateLimiter";
 import { initSecurity } from "./utils/security";
 import { sanitizeText } from "./utils/sanitize";

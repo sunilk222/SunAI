@@ -1,0 +1,569 @@
+================================================================================
+                        VOICE APP - COMPLETE DOCUMENTATION
+================================================================================
+                    100% Free Text to Speech Application
+                         Generated: February 2026
+================================================================================
+
+
+================================================================================
+SECTION 1: DEPENDENCIES (Small to Big)
+================================================================================
+
+--- NPM Production Dependencies ---
+
+#   Package                          Version    Size (approx)  Purpose
+--- -------------------------------- ---------- -------------- ----------------------------------
+1   web-vitals                       ^2.1.4     ~5 KB          Performance metrics reporting
+2   @testing-library/user-event      ^13.5.0    ~30 KB         Test utility for user events
+3   @testing-library/jest-dom        ^6.9.1     ~50 KB         Custom Jest DOM matchers
+4   @testing-library/dom             ^10.4.1    ~80 KB         DOM testing utilities
+5   @testing-library/react           ^16.3.2    ~30 KB         React component testing
+6   mp3-mediarecorder                ^4.0.5     ~100 KB        WASM MP3 recorder (installed, unused)
+7   react-select                     ^5.10.2    ~150 KB        Enhanced dropdown component
+8   @diffusionstudio/piper-wasm      ^1.0.0     ~200 KB        Piper phonemizer JS bindings
+9   @mintplex-labs/piper-tts-web     ^1.0.4     ~300 KB        Piper TTS engine
+10  react                            ^19.2.4    ~300 KB        UI framework
+11  react-dom                        ^19.2.4    ~400 KB        React DOM renderer
+12  onnxruntime-web                  ^1.18.0    ~2 MB (JS)     ONNX model inference engine
+13  react-scripts                    5.0.1      ~100+ MB       Build toolchain (dev only)
+
+--- NPM Dev Dependencies ---
+
+#   Package                          Version    Size (approx)  Purpose
+--- -------------------------------- ---------- -------------- ----------------------------------
+1   javascript-obfuscator            ^5.4.1     ~15 MB         Post-build JS code obfuscation
+
+--- Local Static Assets (public/) ---
+
+#   File                                  Size        Purpose
+--- ------------------------------------- ----------- ----------------------------------
+1   public/index.html                     ~2 KB       HTML entry point with CSP headers
+2   public/manifest.json                  ~1 KB       PWA manifest
+3   public/robots.txt                     ~1 KB       Search engine crawl rules
+4   public/piper/piper_phonemize.wasm     ~635 KB     Piper phonemizer WASM binary
+5   public/piper/piper_phonemize.data     ~18 MB      Piper phonemizer data (espeak-ng)
+6   public/ort/ort-wasm-simd.wasm         ~10.5 MB    ONNX Runtime WASM (SIMD)
+7   public/ort/ort-wasm-simd-threaded.wasm ~10.7 MB   ONNX Runtime WASM (SIMD+threads)
+8   public/ort/ort-wasm-simd.jsep.wasm    ~18.4 MB    ONNX Runtime WASM (JSEP)
+9   public/ort/ort-wasm-simd-threaded.jsep.wasm ~20.7 MB ONNX Runtime WASM (JSEP+threads)
+10  public/ort/ort-wasm.wasm              ~9.8 MB     ONNX Runtime WASM (base)
+
+--- External Runtime Dependencies (fetched by user's browser) ---
+
+#   Resource              Size            Source              Cached?
+--- --------------------- --------------- ------------------- --------
+1   Flag icons            ~5 KB each      flagcdn.com         Browser cache
+2   Piper voice models    15-50 MB each   huggingface.co      OPFS (persistent)
+
+
+================================================================================
+SECTION 2: ARCHITECTURE
+================================================================================
+
+--- High-Level Architecture ---
+
++------------------------------------------------------------------+
+|                        USER'S BROWSER                            |
+|                                                                  |
+|  +------------------------------------------------------------+ |
+|  |                    React SPA (Client-Side)                  | |
+|  |                                                             | |
+|  |  +----------+  +-----------+  +-----------+  +-----------+ | |
+|  |  |  Text    |  | Language  |  |  Voice    |  |  Voice    | | |
+|  |  |  Input   |  | Selector  |  | Selector  |  | Effects   | | |
+|  |  +----+-----+  +-----+-----+  +-----+-----+  +-----+----+ | |
+|  |       |               |              |               |      | |
+|  |       +---------------+--------------+---------------+      | |
+|  |                       |                                     | |
+|  |               +-------v--------+                            | |
+|  |               |    App.js      |                            | |
+|  |               | (Orchestrator) |                            | |
+|  |               +-------+--------+                            | |
+|  |                       |                                     | |
+|  |         +-------------+-------------+                       | |
+|  |         |             |             |                       | |
+|  |   +-----v-----+ +----v-----+ +-----v------+               | |
+|  |   | Security  | | Content  | |   Rate     |               | |
+|  |   |  Layer    | | Moderate | |  Limiter   |               | |
+|  |   +-----------+ +----------+ +------------+               | |
+|  |                       |                                     | |
+|  |         +-------------+-------------+                       | |
+|  |         |                           |                       | |
+|  |  +------v-----------+    +----------v-----------+          | |
+|  |  |   SPEAK PATH     |    |   DOWNLOAD PATH      |          | |
+|  |  |                  |    |                      |          | |
+|  |  | Piper Language?  |    | Piper Language?      |          | |
+|  |  | +--YES-+ +-NO--+ |    | +--YES-+ +---NO---+ |          | |
+|  |  | |Piper | |Brwsr| |    | |Piper | | Google | |          | |
+|  |  | | TTS  | |Voice| |    | | TTS  | |  TTS   | |          | |
+|  |  | +------+ +-----+ |    | +------+ +--------+ |          | |
+|  |  +------------------+    +----------------------+          | |
+|  +------------------------------------------------------------+ |
+|                                                                  |
+|  +------------------------------------------------------------+ |
+|  |                  WASM Runtime Layer                          | |
+|  |                                                             | |
+|  |  +------------------+  +----------------------------------+ | |
+|  |  | ONNX Runtime     |  | Piper Phonemizer (espeak-ng)     | | |
+|  |  | /ort/*.wasm      |  | /piper/piper_phonemize.*         | | |
+|  |  | (~10-20 MB)      |  | (~19 MB)                         | | |
+|  |  +--------+---------+  +----------------+-----------------+ | |
+|  |           |                             |                   | |
+|  |           +-------------+---------------+                   | |
+|  |                         |                                   | |
+|  |                +--------v---------+                         | |
+|  |                |  Voice Model     |                         | |
+|  |                |  (.onnx file)    |                         | |
+|  |                |  15-50 MB each   |                         | |
+|  |                +------------------+                         | |
+|  |                                                             | |
+|  |  Storage: OPFS (Origin Private File System) for caching     | |
+|  +------------------------------------------------------------+ |
++------------------------------------------------------------------+
+
+
+--- Dependency Chain ---
+
+User's Browser
+  +-- index.html (CSP headers)
+       +-- React App (bundle.js)
+            +-- react + react-dom (UI framework)
+            +-- react-select (language dropdown)
+            +-- App.js (orchestrator)
+            |    +-- piperTTS.js
+            |    |    +-- @mintplex-labs/piper-tts-web (TTS engine)
+            |    |    |    +-- onnxruntime-web -> /ort/*.wasm (inference)
+            |    |    |    +-- piper-o91UDS6e.js -> /piper/*.wasm (phonemizer)
+            |    |    |    +-- HuggingFace CDN -> voice models (.onnx)
+            |    |    +-- Session cache (per voiceId)
+            |    +-- downloadAudio.js
+            |    |    +-- piperTTS.js (primary - WAV)
+            |    |    +-- Google TTS via CORS proxies (fallback - MP3)
+            |    +-- contentModeration.js (text filtering)
+            |    +-- rateLimiter.js (5 req/min)
+            |    +-- security.js (anti-debug, console disable)
+            |    +-- sanitize.js (HTML strip)
+            |    +-- usageLogger.js (localStorage logs)
+            +-- Components (TextInput, VoiceSelector, etc.)
+
+
+--- Security Architecture ---
+
+BUILD TIME:
+  1. GENERATE_SOURCEMAP=false (.env)
+     -> No source maps in production
+  2. javascript-obfuscator (obfuscate.js)
+     -> Control flow flattening
+     -> Dead code injection
+     -> String array encoding (base64)
+     -> Self-defending code
+     -> Debug protection
+
+RUNTIME (security.js):
+  3. Console suppression (production only)
+  4. DevTools blocking (F12, Ctrl+Shift+I)
+  5. Right-click disabled
+  6. Text selection disabled (except inputs)
+  7. Anti-debugger trap (3s interval)
+
+NETWORK (index.html CSP):
+  8. Content Security Policy
+     script-src:  'self' 'unsafe-eval' blob:
+     connect-src: 'self' huggingface.co, corsproxy.io, allorigins,
+                  codetabs, thingproxy, translate.google.com
+     img-src:     'self' data: flagcdn.com
+
+INPUT (App.js + utils):
+  9.  sanitizeText() - strips HTML tags
+  10. maxLength=5000 on textarea
+  11. contentModeration - word blocklist (6 categories)
+  12. CAPTCHA verification required
+  13. Rate limiter - 5 requests/minute
+
+
+--- Caching Architecture ---
+
+Layer 1: JavaScript Memory (sessionCache)
+  sessionCache = {
+    "en_US-hfc_male-medium": TtsSession,
+    "en_US-hfc_female-medium": TtsSession,
+    ...
+  }
+  -> Instant reuse, lost on page refresh
+
+Layer 2: WAV Result Cache (lastResult)
+  lastResult = { voiceId, text, blob }
+  -> Speak then Download = instant (no regen)
+
+Layer 3: OPFS (Origin Private File System)
+  navigator.storage / "piper" directory
+  -> Voice .onnx models + .json configs
+  -> Persists across page refreshes
+  -> ~15-50 MB per voice model
+
+Layer 4: Browser HTTP Cache
+  -> WASM files (/ort/*, /piper/*)
+  -> JS/CSS bundles
+  -> Flag images from flagcdn.com
+
+Layer 5: localStorage
+  -> Theme preference (va_theme)
+  -> Usage logs (va_usage_logs)
+
+
+--- External Services (No Cost) ---
+
+Service                 Used For
+----------------------  ------------------------------------
+HuggingFace CDN         Piper voice model downloads
+flagcdn.com             Country flag images
+Google Translate TTS    Fallback MP3 download (non-Piper)
+corsproxy.io            CORS proxy for Google TTS
+api.allorigins.win      CORS proxy fallback #2
+api.codetabs.com        CORS proxy fallback #3
+thingproxy.freeboard    CORS proxy fallback #4
+
+All free. No API keys. No accounts. No server required.
+
+
+================================================================================
+SECTION 3: FILE DESCRIPTIONS
+================================================================================
+
+--- Entry & Core Files ---
+
+src/index.js (18 lines)
+  React entry point. Creates a React 18 root, renders <App /> inside
+  StrictMode, and calls reportWebVitals() for performance metrics.
+
+src/App.js (379 lines)
+  The main orchestrator. Manages all state (text, language, voice type,
+  effects, CAPTCHA, theme, loading states). Wires together moderation,
+  rate limiting, usage logging, speak/download/clear actions. Composes
+  all UI components. Handles both Piper TTS and browser speech paths.
+  Preloads voice models on language change.
+  Key functions: playWithPiper, handleSpeak, handleDownloadAudio,
+                 handleSampleToggle, handleClear
+
+src/constants.js (249 lines)
+  Central configuration file. Defines all supported languages (with
+  country codes), voice gender constants, default settings, sample text
+  per language, and the BCP-47 to Google TTS language mapping.
+  Key exports: SUPPORTED_LANGUAGES, VOICE_TYPES, DEFAULT_LANGUAGE,
+               DEFAULT_VOICE_TYPE, VOICE_EFFECTS_DEFAULTS, CAPTCHA_LENGTH,
+               TTS_LANG_MAP, getSampleText, getFlagUrl
+
+src/App.css (342 lines)
+  All application styles. CSS custom properties for dark/light themes.
+  Layouts for header, cards, text input, selectors, sliders, CAPTCHA,
+  action buttons, toasts, content warnings, policy modals, FAQ accordion,
+  model loading bar, footer, and mobile responsive breakpoints.
+
+.env (1 line)
+  Sets GENERATE_SOURCEMAP=false to prevent source maps in production builds.
+
+
+--- Components (8 files) ---
+
+src/components/TextInput.js (26 lines)
+  Simple labeled textarea with a 5,000 character max limit and live
+  character counter. Controlled component via value/onChange props.
+
+src/components/LanguageSelector.js (162 lines)
+  Searchable dropdown built with react-select. Groups languages into
+  "AI Voices" (Piper-supported) and "Browser Voices" (fallback). Shows
+  country flag thumbnails and an "AI" badge for Piper languages.
+  Theme-aware styling.
+  Key exports: LanguageSelector (default), CustomOption,
+               CustomSingleValue, CustomGroupHeading
+
+src/components/VoiceSelector.js (91 lines)
+  Gender selection tabs (Male/Female). For Piper languages, displays the
+  AI voice name (e.g., "Male - Alan") and a badge. For non-Piper
+  languages, shows a scrollable list of browser voices with select and
+  preview buttons, including "HD" badges for cloud voices.
+
+src/components/VoiceEffects.js (82 lines)
+  Three range sliders for Rate (0.5-2x), Pitch (0-2), and Volume (0-1)
+  with labels showing current values and a Reset button.
+
+src/components/ActionButtons.js (49 lines)
+  Row of action buttons: Speak (shows "Generating..." when loading),
+  Stop (when speaking), Download Audio (shows "Downloading..." when
+  active), and Clear. All respect the disabled state.
+
+src/components/CaptchaValidator.js (115 lines)
+  Client-side CAPTCHA generator. Creates a random alphanumeric string,
+  displays it with styled characters, provides a refresh button, and
+  verifies user input. Calls onVerified(true/false) on submit.
+
+src/components/FAQ.js (96 lines)
+  Accordion-style FAQ section with questions about pricing, CAPTCHA,
+  languages, voice customization, audio downloads, and privacy.
+
+src/components/LoginGate.js (312 lines)
+  Full login form component (currently unused - app runs in guest mode).
+  Also exports reusable PolicyModal overlay and long-form
+  PrivacyPolicyContent and TermsOfServiceContent components that
+  App.js uses for the footer links.
+  Key exports: LoginGate (default, unused), PolicyModal,
+               PrivacyPolicyContent, TermsOfServiceContent
+
+
+--- Hooks (3 files) ---
+
+src/hooks/useSpeechSynthesis.js (48 lines)
+  Wraps the browser's Web Speech API. Provides speak(text, voiceURI,
+  {rate, pitch, volume}), stop(), and isSpeaking state. Handles cleanup
+  on unmount. Used as fallback when Piper TTS is unavailable.
+
+src/hooks/useVoices.js (178 lines)
+  Loads all browser speechSynthesis voices, classifies them by supported
+  language, and heuristically splits into male/female lists (capped at 6
+  each). Merges Piper-supported language codes into availableLanguageCodes
+  so they appear in the language selector even without browser voices.
+  Key exports: useVoices -> { voicesByLanguage, availableLanguageCodes }
+
+src/hooks/useAuth.js (50 lines)
+  (Currently unused) Persists user login info (name, email, sessionId)
+  in localStorage. Provides login, logout, isLoggedIn. Was part of the
+  original LoginGate flow, now bypassed with guest mode.
+
+
+--- Utilities (8 files) ---
+
+src/utils/piperTTS.js (198 lines)
+  Core TTS engine integration. Interfaces with @mintplex-labs/piper-tts-web.
+  Patches the library's WASM paths to use local files. Maps 18 languages
+  to male/female Piper voice IDs. Maintains a per-voiceId session cache
+  to avoid the library's broken singleton. Caches last WAV result for
+  instant download after speak. Provides preloading functions.
+  Key exports: getPiperVoiceId, hasPiperVoice, getPiperLanguages,
+               getPiperVoiceInfo, generateSpeech, preloadVoice,
+               preloadLanguageVoices, isVoiceReady, triggerBlobDownload,
+               playBlob
+
+src/utils/downloadAudio.js (140 lines)
+  Handles both speak and download flows. For speak: generates WAV via
+  Piper and plays it. For download: tries Piper WAV first, falls back
+  to Google Translate TTS via 4 CORS proxies (chunking long text into
+  200-char segments), concatenates MP3 blobs, or opens a new tab.
+  Key exports: speakWithPiper, downloadSpeechAudio
+
+src/utils/contentModeration.js (112 lines)
+  Client-side text moderation with phrase blocklists across 6 categories:
+  Hate Speech, Abusive Language, Sexual Content, Religious Insults,
+  Violence Encouragement, and Illegal Instructions. Returns { safe,
+  violations } and generates a user-facing warning message.
+  Key exports: moderateContent, getViolationMessage
+
+src/utils/rateLimiter.js (21 lines)
+  In-memory sliding window rate limiter. Allows max 5 actions per 60
+  seconds per action type ("speak", "download"). Returns { allowed,
+  waitSec } with the remaining wait time.
+  Key exports: checkRateLimit
+
+src/utils/security.js (64 lines)
+  Runtime security hardening. In production: disables all console methods.
+  Always: blocks F12, Ctrl+Shift+I/J/C, Ctrl+U, Ctrl+S; disables
+  right-click; disables text selection (except inputs); runs periodic
+  debugger timing trap that clears page if DevTools detected.
+  Key exports: initSecurity
+
+src/utils/sanitize.js (8 lines)
+  Input sanitizer. Strips HTML tags and angle brackets from user text,
+  truncates to 5,000 characters. Returns empty string for non-strings.
+  Key exports: sanitizeText
+
+src/utils/usageLogger.js (70 lines)
+  Logs structured usage events to localStorage (capped at 500 entries).
+  Each entry includes timestamp, user info, action type, and metadata.
+  Provides CSV export triggered from the footer "Logs" button.
+  Key exports: logUsage, getUsageLogs, clearUsageLogs, exportLogsAsCSV
+
+src/utils/downloadFile.js (14 lines)
+  (Currently unused) Generic utility to trigger a browser download of
+  plain text as a .txt file. Replaced by triggerBlobDownload in piperTTS.js.
+  Key exports: downloadTextAsFile
+
+
+--- Build & Test Files ---
+
+obfuscate.js (48 lines)
+  Post-build script run by "npm run build". Reads all JS files from
+  build/static/js/, obfuscates each with javascript-obfuscator (control
+  flow flattening, dead code injection, string array encoding, debug
+  protection, self-defending code).
+
+src/__mocks__/piperTTSMock.js (20 lines)
+  Jest mock for @mintplex-labs/piper-tts-web. Stubs TtsSession.create,
+  predict, voices, stored, download, remove, flush so tests run without
+  loading real WASM. Wired via moduleNameMapper in package.json.
+
+src/App.test.js - Default CRA smoke test
+src/setupTests.js - Imports @testing-library/jest-dom
+src/reportWebVitals.js - Optional Core Web Vitals measurement
+
+
+--- Static / Config Files ---
+
+public/index.html (47 lines)
+  HTML shell with Content Security Policy meta tag restricting
+  script/style/connect/image sources.
+
+public/manifest.json - PWA manifest
+public/robots.txt - Search engine rules
+public/ort/ (~70 MB) - 5 ONNX Runtime WASM binary files
+public/piper/ (~19 MB) - Piper phonemizer WASM + espeak-ng data
+
+package.json (53 lines)
+  React 19 + CRA 5 app. 13 production dependencies, 1 dev dependency.
+  Build script chains react-scripts build with node obfuscate.js.
+  Jest configured to mock Piper TTS.
+
+
+--- Unused / Legacy Files ---
+
+File                              Status    Notes
+--------------------------------  --------  ----------------------------------
+src/hooks/useAuth.js              Unused    Login removed, guest mode only
+src/components/LoginGate.js       Partial   Only PolicyModal + content used
+src/utils/downloadFile.js         Unused    Replaced by triggerBlobDownload
+mp3-mediarecorder (npm)           Unused    Installed but never imported
+
+
+================================================================================
+SECTION 4: SYSTEM REQUIREMENTS & SETUP
+================================================================================
+
+--- System Prerequisites ---
+
+Software     Version                Purpose
+-----------  ---------------------  ----------------------------------
+Node.js      v18+ (v20 LTS ideal)  JavaScript runtime
+npm          v9+ (comes w/ Node)   Package manager
+Git          Any recent version    Version control
+Web Browser  Chrome 90+ / Edge 90+ Must support WASM, OPFS, Web Speech
+
+No Python, no database, no Docker, no backend server needed.
+
+
+--- Install Steps ---
+
+1. Clone and install:
+   git clone <repo-url> voice-app
+   cd voice-app
+   npm install
+
+2. Setup ONNX Runtime WASM files (public/ort/):
+   mkdir public\ort
+   copy node_modules\onnxruntime-web\dist\ort-wasm-simd.wasm public\ort\
+   copy node_modules\onnxruntime-web\dist\ort-wasm-simd-threaded.wasm public\ort\
+   copy node_modules\onnxruntime-web\dist\ort-wasm-simd.jsep.wasm public\ort\
+   copy node_modules\onnxruntime-web\dist\ort-wasm-simd-threaded.jsep.wasm public\ort\
+   copy node_modules\onnxruntime-web\dist\ort-wasm.wasm public\ort\
+
+3. Setup Piper Phonemizer WASM files (public/piper/):
+   mkdir public\piper
+   PowerShell:
+   Invoke-WebRequest -Uri "https://cdn.jsdelivr.net/npm/@diffusionstudio/piper-wasm@1.0.0/build/piper_phonemize.wasm" -OutFile "public\piper\piper_phonemize.wasm"
+   Invoke-WebRequest -Uri "https://cdn.jsdelivr.net/npm/@diffusionstudio/piper-wasm@1.0.0/build/piper_phonemize.data" -OutFile "public\piper\piper_phonemize.data"
+
+4. Run:
+   npm start          -> Dev server at http://localhost:3000
+   npm run build      -> Production build + obfuscation
+   npx serve -s build -> Serve production build
+
+
+--- Run Commands ---
+
+Command            What It Does
+-----------------  ------------------------------------------
+npm start          Starts dev server at http://localhost:3000
+npm run build      Creates production build + runs obfuscation
+npm test           Runs Jest tests
+npx serve -s build Serves the production build locally
+
+
+--- Browser Requirements ---
+
+Feature                          Required For            Chrome  Firefox  Safari  Edge
+-------------------------------  ----------------------  ------  -------  ------  ----
+WebAssembly                      ONNX + Piper engine     57+     52+      11+     16+
+OPFS (Origin Private FS)         Voice model caching     86+     111+     15.2+   86+
+Web Speech API                   Browser voice fallback  Yes     Yes      Yes     Yes
+Blob URLs                        Audio playback/download Yes     Yes      Yes     Yes
+
+Recommended: Chrome 90+ or Edge 90+
+
+
+--- Deployment Options ---
+
+Platform            Command / Steps                          Cost
+------------------  ---------------------------------------  ------
+Cloudflare Pages    Connect GitHub, build: npm run build     Free
+Vercel              npx vercel --prod                        Free
+Netlify             Drag & drop build/ folder                Free
+GitHub Pages        gh-pages -d build                        Free
+Any web server      Copy build/ to server root               Varies
+
+Server space needed: ~15-20 MB (static files only)
+No backend processing. Each user's browser does the TTS work.
+
+
+--- File Structure After Setup ---
+
+voice-app/
++-- .env
++-- package.json
++-- obfuscate.js
++-- node_modules/                 (created by npm install)
++-- public/
+|   +-- index.html
+|   +-- manifest.json
+|   +-- robots.txt
+|   +-- ort/                      (YOU MUST CREATE)
+|   |   +-- ort-wasm-simd.wasm
+|   |   +-- ort-wasm-simd-threaded.wasm
+|   |   +-- ort-wasm-simd.jsep.wasm
+|   |   +-- ort-wasm-simd-threaded.jsep.wasm
+|   |   +-- ort-wasm.wasm
+|   +-- piper/                    (YOU MUST CREATE)
+|       +-- piper_phonemize.wasm
+|       +-- piper_phonemize.data
++-- src/
+|   +-- index.js
+|   +-- App.js
+|   +-- App.css
+|   +-- constants.js
+|   +-- components/
+|   |   +-- TextInput.js
+|   |   +-- LanguageSelector.js
+|   |   +-- VoiceSelector.js
+|   |   +-- VoiceEffects.js
+|   |   +-- ActionButtons.js
+|   |   +-- CaptchaValidator.js
+|   |   +-- FAQ.js
+|   |   +-- LoginGate.js
+|   +-- hooks/
+|   |   +-- useSpeechSynthesis.js
+|   |   +-- useVoices.js
+|   |   +-- useAuth.js
+|   +-- utils/
+|   |   +-- piperTTS.js
+|   |   +-- downloadAudio.js
+|   |   +-- contentModeration.js
+|   |   +-- rateLimiter.js
+|   |   +-- security.js
+|   |   +-- sanitize.js
+|   |   +-- usageLogger.js
+|   |   +-- downloadFile.js
+|   +-- __mocks__/
+|       +-- piperTTSMock.js
++-- build/                        (created by npm run build)
+
+
+================================================================================
+END OF DOCUMENTATION
+================================================================================

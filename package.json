@@ -2,6 +2,10 @@
   "name": "voice-app",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": "18.x",
+    "npm": "9.x"
+  },
   "dependencies": {
     "@diffusionstudio/piper-wasm": "^1.0.0",
     "@mintplex-labs/piper-tts-web": "^1.0.4",
@@ -19,7 +23,7 @@
   },
   "scripts": {
     "start": "react-scripts start",
-    "build": "react-scripts build && node obfuscate.js",
+    "build": "node node_modules/react-scripts/bin/react-scripts.js build && node obfuscate.js",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
   },

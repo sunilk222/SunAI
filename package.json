@@ -3,8 +3,61 @@
   "version": "0.1.0",
   "private": true,
   "engines": {
-    "node": "18.x",
-    "npm": "9.x"
+    "node": "24.x"
+  },
+  "dependencies": {
+    "@diffusionstudio/piper-wasm": "^1.0.0",
+    "@mintplex-labs/piper-tts-web": "^1.0.4",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^13.5.0",
+    "mp3-mediarecorder": "^4.0.5",
+    "onnxruntime-web": "^1.18.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-scripts": "5.0.1",
+    "react-select": "^5.10.2",
+    "web-vitals": "^2.1.4"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "node node_modules/react-scripts/bin/react-scripts.js build && node obfuscate.js",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
+  },
+  "jest": {
+    "moduleNameMapper": {
+      "^@mintplex-labs/piper-tts-web$": "<rootDir>/src/__mocks__/piperTTSMock.js"
+    }
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "devDependencies": {
+    "javascript-obfuscator": "^5.4.1"
+  }
+}{
+  "name": "voice-app",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": "24.x"
   },
   "dependencies": {
     "@diffusionstudio/piper-wasm": "^1.0.0",
